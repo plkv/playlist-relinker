@@ -93,21 +93,25 @@
 
     <a href="#" onclick="openSpotifyApp(event)" class="button">Open playlist</a>
 
-<div class="track-list">
-    {% for track in report_tracks %}
-        <div class="track {% if track.status == 'not_found' %}not-found{% endif %}">
+    <div class="track-list">
+      {% for track in report_tracks %}
+        <div class="track">
+          <div class="track-icon">
             {% if track.status == 'found' %}
-                ✅
+              ✅
             {% else %}
-                ⚠️
+              ⚠️
             {% endif %}
+          </div>
+          <div>
             {{ track.original }}
             {% if track.found %}
-                → {{ track.found }}
+              → {{ track.found }}
             {% endif %}
+          </div>
         </div>
-    {% endfor %}
-</div>
+      {% endfor %}
+    </div>
 
     {% if error %}
       <div class="error">Error: {{ error }}</div>
