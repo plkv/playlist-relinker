@@ -67,7 +67,7 @@
     <div class="container">
         <h1>Rebuild your old Spotify playlist</h1>
         <div class="version">v1.03</div>
-        <form method="post" action="{{ url_for('relink') }}">
+        <form method="post" action="{{ url_for('link') }}">
             <input type="text" id="playlist_url" name="playlist_url" placeholder="Spotify playlist link..." required>
             <button type="submit" id="rebuild_btn" disabled>Rebuild</button>
         </form>
