@@ -35,71 +35,88 @@ def callback():
     code = request.args.get('code')
     token_info = sp_oauth.get_access_token(code)
     session['token_info'] = token_info
-    return redirect(url_for('relink'))
+    return redirect(url_for('link'))
 
-@app.route('/relink', methods=['GET', 'POST'])
-def relink():
+@app.route('/link', methods=['GET', 'POST'])
+def link():
     token_info = session.get('token_info', None)
     if not token_info:
         return redirect(url_for('login'))
 
-    sp = spotipy.Spotify(auth=token_info['access_token'])
-    message = ''
-    
     if request.method == 'POST':
         playlist_url = request.form['playlist_url']
-        try:
-            playlist_id = playlist_url.split("/")[-1].split("?")[0]
-            original_playlist = sp.playlist(playlist_id)
-            tracks_data = sp.playlist_tracks(playlist_id)
-            tracks = tracks_data['items']
+        session['playlist_url'] = playlist_url
+        return redirect(url_for('relink'))
 
-            found_tracks = []
-            not_found_tracks = []
-            report_tracks = []
+    return render_template('link.html')
 
-            for item in tracks:
-                track = item['track']
-                if track:
-                    original_track_name = track['name']
-                    original_artist_name = track['artists'][0]['name']
-                    original_query = f"{original_track_name} {original_artist_name}"
+@app.route('/relink')
+def relink():
+    token_info = session.get('token_info', None)
+    playlist_url = session.get('playlist_url', None)
 
-                    search_result = sp.search(q=original_query, type="track", limit=1)
-                    if search_result['tracks']['items']:
-                        found_track = search_result['tracks']['items'][0]
-                        found_track_name = found_track['name']
-                        found_artist_name = found_track['artists'][0]['name']
-                        found_tracks.append(found_track['id'])
-                        report_tracks.append((f"{original_artist_name} – {original_track_name}", f"{found_artist_name} – {found_track_name}"))
-                    else:
-                        not_found_tracks.append(original_query)
-                        report_tracks.append((f"{original_artist_name} – {original_track_name}", "❌"))
+    if not token_info or not playlist_url:
+        return redirect(url_for('home'))
 
-            user_id = sp.current_user()['id']
+    sp = spotipy.Spotify(auth=token_info['access_token'])
 
-            new_playlist = sp.user_playlist_create(
-                user=user_id,
-                name=f"♻️ {original_playlist['name']}",
-                public=True
-            )
+    try:
+        playlist_id = playlist_url.split("/")[-1].split("?")[0]
+        original_playlist = sp.playlist(playlist_id)
+        tracks_data = sp.playlist_tracks(playlist_id)
+        tracks = tracks_data['items']
 
-            if found_tracks:
-                sp.playlist_add_items(playlist_id=new_playlist['id'], items=found_tracks)
+        found_tracks = []
+        not_found_tracks = []
+        report_tracks = []
 
-            message = f"✅ Новый плейлист создан: <a href='{new_playlist['external_urls']['spotify']}' target='_blank'>{new_playlist['name']}</a><br><br>"
-            message += "<table border='1' cellspacing='0' cellpadding='5'>"
-            message += "<tr><th>Оригинал</th><th>Найдено</th></tr>"
+        for item in tracks:
+            track = item['track']
+            if track:
+                original_track_name = track['name']
+                original_artist_name = track['artists'][0]['name']
+                original_query = f"{original_track_name} {original_artist_name}"
 
-            for original, found in report_tracks:
-                message += f"<tr><td>{original}</td><td>{found}</td></tr>"
+                search_result = sp.search(q=original_query, type="track", limit=1)
+                if search_result['tracks']['items']:
+                    found_track = search_result['tracks']['items'][0]
+                    found_track_name = found_track['name']
+                    found_artist_name = found_track['artists'][0]['name']
+                    found_tracks.append(found_track['id'])
+                    report_tracks.append({
+                        'status': 'found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': f"{found_artist_name} – {found_track_name}"
+                    })
+                else:
+                    not_found_tracks.append(original_query)
+                    report_tracks.append({
+                        'status': 'not_found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': None
+                    })
 
-            message += "</table>"
+        user_id = sp.current_user()['id']
 
-        except Exception as e:
-            message = f"Ошибка: {str(e)}"
+        new_playlist = sp.user_playlist_create(
+            user=user_id,
+            name=f"♻️ {original_playlist['name']}",
+            public=True
+        )
 
-    return render_template('relink.html', message=message)
+        if found_tracks:
+            sp.playlist_add_items(playlist_id=new_playlist['id'], items=found_tracks)
+
+        return render_template('relink.html', 
+                               playlist_name=new_playlist['name'],
+                               playlist_url=new_playlist['external_urls']['spotify'],
+                               total=len(report_tracks),
+                               found=len(found_tracks),
+                               not_found=len(not_found_tracks),
+                               report_tracks=report_tracks)
+
+    except Exception as e:
+        return render_template('relink.html', error=str(e))
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
