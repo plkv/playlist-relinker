@@ -73,55 +73,17 @@ def search_best_match(sp, original_artist, original_track_name):
 
 # ===== Маршруты =====
 
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-@app.route('/login')
-def login():
-    sp_oauth = SpotifyOAuth(client_id=CLIENT_ID,
-                             client_secret=CLIENT_SECRET,
-                             redirect_uri=REDIRECT_URI,
-                             scope=SCOPE)
-    auth_url = sp_oauth.get_authorize_url()
-    return redirect(auth_url)
-
-@app.route('/callback')
-def callback():
-    sp_oauth = SpotifyOAuth(client_id=CLIENT_ID,
-                             client_secret=CLIENT_SECRET,
-                             redirect_uri=REDIRECT_URI,
-                             scope=SCOPE)
-    session.clear()
-    code = request.args.get('code')
-    token_info = sp_oauth.get_access_token(code)
-    session['token_info'] = token_info
-    return redirect(url_for('link'))
-
-@app.route('/link', methods=['GET', 'POST'])
-def link():
-    token_info = session.get('token_info', None)
-    if not token_info:
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        playlist_url = request.form['playlist_url']
-        session['playlist_url'] = playlist_url
-        return redirect(url_for('relink'))
-
-    return render_template('link.html')
-
 @app.route('/relink', methods=['GET', 'POST'])
 def relink():
-    token_info = session.get('token_info', None)
-    playlist_url = session.get('playlist_url', None)
-
-    if not token_info or not playlist_url:
-        return redirect(url_for('home'))
-
-    sp = spotipy.Spotify(auth=token_info['access_token'])
-
     try:
+        token_info = session.get('token_info', None)
+        playlist_url = session.get('playlist_url', None)
+
+        if not token_info or not playlist_url:
+            return redirect(url_for('home'))
+
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+
         playlist_id = playlist_url.split("/")[-1].split("?")[0]
         original_playlist = sp.playlist(playlist_id)
         tracks_data = sp.playlist_tracks(playlist_id)
@@ -132,33 +94,33 @@ def relink():
 
         for item in tracks:
             track = item['track']
-            if not track:
-                continue
+            if track:
+                original_track_name = track['name']
+                original_artist_name = track['artists'][0]['name']
+                original_artists = artist_list(original_artist_name)
 
-            original_track_id = track.get('id')
-            original_track_name = track['name']
-            original_artist_name = track['artists'][0]['name']
+                # Поиск: пробуем разные варианты, постепенно упрощая
+                search_queries = [
+                    f"track:{original_track_name} artist:{original_artist_name}",
+                    f"{original_track_name} {original_artist_name}",
+                    f"{re.sub(r'\(.*?\)', '', original_track_name).strip()} {original_artist_name}",
+                    f"{original_track_name.split('(')[0].strip()} {original_artist_name.split(',')[0]}"
+                ]
 
-            added = False
+                best_match = None
 
-            # Пытаемся добавить напрямую через ID
-            if original_track_id:
-                try:
-                    track_info = sp.track(original_track_id)
-                    if track_info and not track_info['is_local']:
-                        found_tracks.append(original_track_id)
-                        report_tracks.append({
-                            'status': 'found',
-                            'original': f"{original_artist_name} – {original_track_name}",
-                            'found': f"{track_info['artists'][0]['name']} – {track_info['name']}"
-                        })
-                        added = True
-                except:
-                    pass  # ID недействительный, fallback на текстовый поиск
+                for query in search_queries:
+                    search_result = sp.search(q=query, type="track", limit=5)
+                    for candidate in search_result['tracks']['items']:
+                        found_track_name = candidate['name']
+                        found_artists_list = artist_list(', '.join(a['name'] for a in candidate['artists']))
 
-            # Иначе fallback-поиск
-            if not added:
-                best_match = search_best_match(sp, original_artist_name, original_track_name)
+                        if is_similar_name(found_track_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
+                            best_match = candidate
+                            break
+                    if best_match:
+                        break
+
                 if best_match:
                     found_tracks.append(best_match['id'])
                     report_tracks.append({
@@ -184,7 +146,7 @@ def relink():
         if found_tracks:
             sp.playlist_add_items(playlist_id=new_playlist['id'], items=found_tracks)
 
-        return render_template('relink.html', 
+        return render_template('relink.html',
                                playlist_name=new_playlist['name'],
                                playlist_url=new_playlist['external_urls']['spotify'],
                                playlist_spotify_uri=new_playlist['uri'],
@@ -193,8 +155,8 @@ def relink():
                                not_found=len([t for t in report_tracks if t['status'] == 'not_found']),
                                report_tracks=report_tracks)
 
-except Exception as e:
-    return f"Error: {e}"
+    except Exception as e:
+        return f"Internal server error: {e}"
 
 # ===== Запуск =====
 
