@@ -10,44 +10,51 @@ app.secret_key = os.urandom(24)
 CLIENT_ID = 'e727213173e141f482270557f6d11e26'
 CLIENT_SECRET = '924f0275c3214841a33331d0959e2c4f'
 REDIRECT_URI = 'https://playlist-relinker.onrender.com/callback'
-SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private'
 
-# ======= Utility Functions =======
+SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private'
 
 def normalize(text):
     text = text.lower()
-    text = re.sub(r'\(.*?\)', '', text)
-    text = re.sub(r'[^a-z0-9\s]', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = text.strip()
-    text = text.replace(' ', '')  # Убираем ВСЕ пробелы между буквами!
-    return text
+    text = re.sub(r'\(.*?\)', '', text)  # убираем текст в скобках
+    text = re.sub(r'[^a-z0-9\s]', '', text)  # убираем спецсимволы
+    text = re.sub(r'\s+', ' ', text)  # убираем лишние пробелы
+    return text.strip()
 
-def normalize_artist(text):
-    text = text.lower()
-    text = text.replace('feat.', ',')
-    text = text.replace('ft.', ',')
-    text = text.replace('&', ',')
-    text = text.replace('and', ',')
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r',+', ',', text)
-    text = text.replace(' ,', ',').replace(', ', ',')
-    text = text.strip()
-    return text
-
-def artist_list(text):
-    text = normalize_artist(text)
-    return [normalize(artist) for artist in text.split(',') if artist]
+def extract_main_artist_and_track(artist, track_name):
+    track_clean = re.sub(r'\(.*?\)', '', track_name).strip()
+    artist_clean = artist.split(',')[0].split('&')[0].split('and')[0].strip()
+    return artist_clean, track_clean
 
 def has_common_artist(original_artists, found_artists):
     return any(artist in found_artists for artist in original_artists)
 
-def is_similar_name(name1, name2):
-    n1 = normalize(name1)
-    n2 = normalize(name2)
-    return n1 in n2 or n2 in n1
+def is_remix(name):
+    return 'remix' in name.lower()
 
-# ======= Routes =======
+def search_best_match(sp, original_artist, original_track_name):
+    original_query = f"{original_track_name} {original_artist}"
+    search_result = sp.search(q=original_query, type="track", limit=5)
+    
+    for candidate in search_result['tracks']['items']:
+        candidate_track = candidate['name']
+        candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
+
+        if normalize(candidate_track) == normalize(original_track_name) and normalize(candidate_artists).find(normalize(original_artist)) != -1:
+            return candidate
+
+    artist_main, track_main = extract_main_artist_and_track(original_artist, original_track_name)
+    reduced_query = f"{track_main} {artist_main}"
+    search_result_reduced = sp.search(q=reduced_query, type="track", limit=5)
+
+    for candidate in search_result_reduced['tracks']['items']:
+        candidate_track = candidate['name']
+        candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
+
+        if normalize(candidate_track).startswith(normalize(track_main)) and normalize(candidate_artists).find(normalize(artist_main)) != -1:
+            if is_remix(original_track_name) or not is_remix(candidate_track):
+                return candidate
+
+    return None
 
 @app.route('/')
 def home():
@@ -97,23 +104,6 @@ def relink():
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
 
-    def clean_track_name(name):
-        # Убираем скобки и мусор в конце вроде "ii", "iii"
-        name = re.sub(r'\(.*?\)', '', name).strip()
-        name = re.sub(r'\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b$', '', name.strip(), flags=re.IGNORECASE)
-        return name.strip()
-
-    def first_artist(artists_text):
-        artists = artists_text.split(',')
-        return artists[0].strip()
-
-    def is_remix(text):
-        return 'remix' in text.lower()
-
-    def is_original(text):
-        keywords = ['original', 'edit', 'radio mix', 'radio edit']
-        return any(word in text.lower() for word in keywords)
-
     try:
         playlist_id = playlist_url.split("/")[-1].split("?")[0]
         original_playlist = sp.playlist(playlist_id)
@@ -125,58 +115,25 @@ def relink():
 
         for item in tracks:
             track = item['track']
-            if not track:
-                continue
+            if track:
+                original_track_name = track['name']
+                original_artist_name = track['artists'][0]['name']
 
-            original_track_name = track['name']
-            original_artist_name = track['artists'][0]['name']
-            original_artists = artist_list(original_artist_name)
-            original_is_remix = is_remix(original_track_name)
+                best_match = search_best_match(sp, original_artist_name, original_track_name)
 
-            query = f"{original_track_name} {original_artist_name}"
-            search_result = sp.search(q=query, type="track", limit=5)
-
-            best_match = None
-            candidates = search_result['tracks']['items']
-
-            if not candidates:
-                # Если ничего не нашли — fallback
-                fallback_track_name = clean_track_name(original_track_name)
-                fallback_artist = first_artist(original_artist_name)
-                fallback_query = f"{fallback_track_name} {fallback_artist}"
-                fallback_result = sp.search(q=fallback_query, type="track", limit=5)
-                candidates = fallback_result['tracks']['items']
-
-            for candidate in candidates:
-                candidate_name = candidate['name']
-                candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
-                found_artists_list = artist_list(candidate_artists)
-
-                candidate_is_remix = is_remix(candidate_name)
-
-                if original_is_remix and not candidate_is_remix:
-                    continue
-                if not original_is_remix and candidate_is_remix:
-                    continue
-
-                if is_similar_name(candidate_name, original_track_name) or is_similar_name(candidate_name, clean_track_name(original_track_name)):
-                    if has_common_artist(original_artists, found_artists_list) or first_artist(original_artist_name).lower() in candidate_artists.lower():
-                        best_match = candidate
-                        break
-
-            if best_match:
-                found_tracks.append(best_match['id'])
-                report_tracks.append({
-                    'status': 'found',
-                    'original': f"{original_artist_name} – {original_track_name}",
-                    'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
-                })
-            else:
-                report_tracks.append({
-                    'status': 'not_found',
-                    'original': f"{original_artist_name} – {original_track_name}",
-                    'found': None
-                })
+                if best_match:
+                    found_tracks.append(best_match['id'])
+                    report_tracks.append({
+                        'status': 'found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
+                    })
+                else:
+                    report_tracks.append({
+                        'status': 'not_found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': None
+                    })
 
         user_id = sp.current_user()['id']
 
@@ -200,9 +157,6 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
-
-
-# ======= Run =======
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
