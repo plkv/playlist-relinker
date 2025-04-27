@@ -16,15 +16,26 @@ SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-publi
 
 def normalize(text):
     text = text.lower()
-    text = re.sub(r'\(.*?\)', '', text)  # remove anything inside brackets
-    text = re.sub(r'[^a-z0-9\s]', '', text)  # remove special characters
-    text = re.sub(r'\s+', ' ', text)  # normalize spaces
+    text = re.sub(r'\(.*?\)', '', text)  # Remove anything in parentheses
+    text = re.sub(r'[^a-z0-9\s]', '', text)  # Remove special characters
+    text = re.sub(r'\s+', ' ', text)  # Normalize spaces
     return text.strip()
 
+def normalize_artist(text):
+    text = text.lower()
+    text = text.replace('feat.', ',')
+    text = text.replace('ft.', ',')
+    text = text.replace('&', ',')
+    text = text.replace('and', ',')
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r',+', ',', text)
+    text = text.replace(' ,', ',').replace(', ', ',')
+    text = text.strip()
+    return text
+
 def artist_list(text):
-    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
-    parts = [normalize(part) for part in text.split(',')]
-    return [p for p in parts if p]
+    text = normalize_artist(text)
+    return [normalize(artist) for artist in text.split(',') if artist]
 
 def has_common_artist(original_artists, found_artists):
     return any(artist in found_artists for artist in original_artists)
@@ -102,13 +113,11 @@ def relink():
             original_artist_name = track['artists'][0]['name']
             original_artists = artist_list(original_artist_name)
 
-            # Чистый запрос
             query = f"{original_track_name} {original_artist_name}"
-
             search_result = sp.search(q=query, type="track", limit=5)
+
             best_match = None
 
-            # Первый поиск: трек + артист
             if search_result['tracks']['items']:
                 for candidate in search_result['tracks']['items']:
                     candidate_name = candidate['name']
@@ -119,7 +128,7 @@ def relink():
                         best_match = candidate
                         break
 
-            # Если не найдено — fallback: ищем только по названию трека
+            # Fallback: search only by track name if no match
             if not best_match:
                 fallback_query = f"{original_track_name}"
                 fallback_result = sp.search(q=fallback_query, type="track", limit=5)
@@ -133,6 +142,7 @@ def relink():
                         best_match = candidate
                         break
 
+            # Add result only once
             if best_match:
                 found_tracks.append(best_match['id'])
                 report_tracks.append({
@@ -169,7 +179,6 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
-
 
 # ======= Run =======
 
