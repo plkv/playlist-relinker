@@ -63,9 +63,18 @@
     }
     .track {
       display: flex;
-      align-items: center;
-      padding: 8px 0;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 10px 0;
       border-bottom: 1px solid #282828;
+    }
+    .track-original {
+      opacity: 0.5;
+      font-size: 14px;
+    }
+    .track-found {
+      margin-top: 4px;
+      font-size: 16px;
     }
     .track-icon {
       margin-right: 10px;
@@ -96,19 +105,16 @@
     <div class="track-list">
       {% for track in report_tracks %}
         <div class="track">
-          <div class="track-icon">
-            {% if track.status == 'found' %}
-              ✅
-            {% else %}
-              ⚠️
-            {% endif %}
-          </div>
-          <div>
+          <div class="track-original">
             {{ track.original }}
-            {% if track.found %}
-              → {{ track.found }}
-            {% endif %}
           </div>
+          {% if track.found %}
+            <div class="track-found">
+              {{ track.found }}
+            </div>
+          {% else %}
+            <div class="track-found" style="color: #FFA500;">Not found</div>
+          {% endif %}
         </div>
       {% endfor %}
     </div>
@@ -119,7 +125,7 @@
 
     <a href="{{ url_for('link') }}" class="button">Rebuild one more</a>
 
-    <div class="version">v1.05</div>
+    <div class="version">v1.06</div>
   </div>
 
   <script>

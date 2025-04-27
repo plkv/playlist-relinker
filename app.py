@@ -97,6 +97,17 @@ def relink():
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
 
+    def clean_track_name(name):
+        # убрать скобки для fallback поиска
+        return re.sub(r'\(.*?\)', '', name).strip()
+
+    def is_remix(text):
+        return 'remix' in text.lower()
+
+    def is_original(text):
+        keywords = ['original', 'edit', 'radio mix', 'radio edit']
+        return any(word in text.lower() for word in keywords)
+
     try:
         playlist_id = playlist_url.split("/")[-1].split("?")[0]
         original_playlist = sp.playlist(playlist_id)
@@ -114,35 +125,39 @@ def relink():
             original_track_name = track['name']
             original_artist_name = track['artists'][0]['name']
             original_artists = artist_list(original_artist_name)
+            original_is_remix = is_remix(original_track_name)
+            original_is_original = is_original(original_track_name)
 
             query = f"{original_track_name} {original_artist_name}"
             search_result = sp.search(q=query, type="track", limit=5)
 
             best_match = None
 
-            if search_result['tracks']['items']:
-                for candidate in search_result['tracks']['items']:
-                    candidate_name = candidate['name']
-                    candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
-                    found_artists_list = artist_list(candidate_artists)
+            candidates = search_result['tracks']['items']
 
-                    if is_similar_name(candidate_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
-                        best_match = candidate
-                        break
-
-            # fallback - ищем только по названию трека
-            if not best_match:
-                fallback_query = f"{original_track_name}"
+            if not candidates:
+                fallback_query = clean_track_name(original_track_name)
                 fallback_result = sp.search(q=fallback_query, type="track", limit=5)
+                candidates = fallback_result['tracks']['items']
 
-                for candidate in fallback_result['tracks']['items']:
-                    candidate_name = candidate['name']
-                    candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
-                    found_artists_list = artist_list(candidate_artists)
+            for candidate in candidates:
+                candidate_name = candidate['name']
+                candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
+                found_artists_list = artist_list(candidate_artists)
 
-                    if is_similar_name(candidate_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
-                        best_match = candidate
-                        break
+                candidate_is_remix = is_remix(candidate_name)
+                candidate_is_original = is_original(candidate_name)
+
+                # Логика фильтрации ремиксов
+                if original_is_remix and not candidate_is_remix:
+                    continue
+                if not original_is_remix and candidate_is_remix:
+                    continue
+
+                # Проверка имени и артистов
+                if is_similar_name(candidate_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
+                    best_match = candidate
+                    break
 
             if best_match:
                 found_tracks.append(best_match['id'])
@@ -180,6 +195,7 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
+
 
 # ======= Run =======
 
