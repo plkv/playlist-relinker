@@ -73,12 +73,11 @@ def relink():
 
             user_id = sp.current_user()['id']
 
-            new_playlist = sp.user_playlist_create(
-                user=user_id,
-                name=f"Recovered: {original_playlist['name']}",
-                public=True,
-                description="Recovered playlist based on local MP3"
-            )
+new_playlist = sp.user_playlist_create(
+    user=user_id,
+    name=f"♻️ {original_playlist['name']}",
+    public=True
+)
 
             if found_tracks:
                 sp.playlist_add_items(playlist_id=new_playlist['id'], items=found_tracks)
