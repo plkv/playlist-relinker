@@ -98,8 +98,14 @@ def relink():
     sp = spotipy.Spotify(auth=token_info['access_token'])
 
     def clean_track_name(name):
-        # убрать скобки для fallback поиска
-        return re.sub(r'\(.*?\)', '', name).strip()
+        # Убираем скобки и мусор в конце вроде "ii", "iii"
+        name = re.sub(r'\(.*?\)', '', name).strip()
+        name = re.sub(r'\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b$', '', name.strip(), flags=re.IGNORECASE)
+        return name.strip()
+
+    def first_artist(artists_text):
+        artists = artists_text.split(',')
+        return artists[0].strip()
 
     def is_remix(text):
         return 'remix' in text.lower()
@@ -126,17 +132,18 @@ def relink():
             original_artist_name = track['artists'][0]['name']
             original_artists = artist_list(original_artist_name)
             original_is_remix = is_remix(original_track_name)
-            original_is_original = is_original(original_track_name)
 
             query = f"{original_track_name} {original_artist_name}"
             search_result = sp.search(q=query, type="track", limit=5)
 
             best_match = None
-
             candidates = search_result['tracks']['items']
 
             if not candidates:
-                fallback_query = clean_track_name(original_track_name)
+                # Если ничего не нашли — fallback
+                fallback_track_name = clean_track_name(original_track_name)
+                fallback_artist = first_artist(original_artist_name)
+                fallback_query = f"{fallback_track_name} {fallback_artist}"
                 fallback_result = sp.search(q=fallback_query, type="track", limit=5)
                 candidates = fallback_result['tracks']['items']
 
@@ -146,18 +153,16 @@ def relink():
                 found_artists_list = artist_list(candidate_artists)
 
                 candidate_is_remix = is_remix(candidate_name)
-                candidate_is_original = is_original(candidate_name)
 
-                # Логика фильтрации ремиксов
                 if original_is_remix and not candidate_is_remix:
                     continue
                 if not original_is_remix and candidate_is_remix:
                     continue
 
-                # Проверка имени и артистов
-                if is_similar_name(candidate_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
-                    best_match = candidate
-                    break
+                if is_similar_name(candidate_name, original_track_name) or is_similar_name(candidate_name, clean_track_name(original_track_name)):
+                    if has_common_artist(original_artists, found_artists_list) or first_artist(original_artist_name).lower() in candidate_artists.lower():
+                        best_match = candidate
+                        break
 
             if best_match:
                 found_tracks.append(best_match['id'])
