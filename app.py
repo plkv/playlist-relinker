@@ -10,14 +10,31 @@ app.secret_key = os.urandom(24)
 CLIENT_ID = 'e727213173e141f482270557f6d11e26'
 CLIENT_SECRET = '924f0275c3214841a33331d0959e2c4f'
 REDIRECT_URI = 'https://playlist-relinker.onrender.com/callback'
-
 SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private'
+
+# ======= Utility Functions =======
 
 def normalize(text):
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\(.*?\)', '', text)  # remove anything inside brackets
+    text = re.sub(r'[^a-z0-9\s]', '', text)  # remove special characters
+    text = re.sub(r'\s+', ' ', text)  # normalize spaces
     return text.strip()
+
+def artist_list(text):
+    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
+    parts = [normalize(part) for part in text.split(',')]
+    return [p for p in parts if p]
+
+def has_common_artist(original_artists, found_artists):
+    return any(artist in found_artists for artist in original_artists)
+
+def is_similar_name(name1, name2):
+    n1 = normalize(name1)
+    n2 = normalize(name2)
+    return n1 in n2 or n2 in n1
+
+# ======= Routes =======
 
 @app.route('/')
 def home():
@@ -57,58 +74,6 @@ def link():
 
     return render_template('link.html')
 
-def normalize(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9\s]', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
-
-def is_similar(name1, name2):
-    n1 = normalize(name1)
-    n2 = normalize(name2)
-    return n1 in n2 or n2 in n1
-
-def normalize(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9\\s]', '', text)
-    text = re.sub(r'\\s+', ' ', text)
-    return text.strip()
-
-def is_similar_name(name1, name2):
-    n1 = normalize(name1)
-    n2 = normalize(name2)
-    return n1 in n2 or n2 in n1
-
-def artist_list(text):
-    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
-    parts = [normalize(part) for part in text.split(',')]
-    return [p for p in parts if p]
-
-def has_common_artist(original_artists, found_artists):
-    return any(artist in found_artists for artist in original_artists)
-
-import re
-
-def normalize(text):
-    text = text.lower()
-    text = re.sub(r'\(.*?\)', '', text)  # убрать всё в скобках
-    text = re.sub(r'[^a-z0-9\s]', '', text)  # убрать всё кроме букв, цифр и пробелов
-    text = re.sub(r'\s+', ' ', text)  # убрать двойные пробелы
-    return text.strip()
-
-def is_similar_name(name1, name2):
-    n1 = normalize(name1)
-    n2 = normalize(name2)
-    return n1 in n2 or n2 in n1
-
-def artist_list(text):
-    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
-    parts = [normalize(part) for part in text.split(',')]
-    return [p for p in parts if p]
-
-def has_common_artist(original_artists, found_artists):
-    return any(artist in found_artists for artist in original_artists)
-
 @app.route('/relink', methods=['GET', 'POST'])
 def relink():
     token_info = session.get('token_info', None)
@@ -134,9 +99,11 @@ def relink():
                 original_track_name = track['name']
                 original_artist_name = track['artists'][0]['name']
                 original_artists = artist_list(original_artist_name)
-                original_query = f"{original_track_name} {original_artist_name}"
 
-                search_result = sp.search(q=original_query, type="track", limit=5)
+                # Correct formatted search
+                query = f"track:{original_track_name} artist:{original_artist_name}"
+
+                search_result = sp.search(q=query, type="track", limit=5)
                 best_match = None
 
                 for candidate in search_result['tracks']['items']:
@@ -184,7 +151,7 @@ def relink():
     except Exception as e:
         return render_template('relink.html', error=str(e))
 
-
+# ======= Run the app =======
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
