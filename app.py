@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, session, url_for
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
+import re
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -11,6 +12,12 @@ CLIENT_SECRET = '924f0275c3214841a33331d0959e2c4f'
 REDIRECT_URI = 'https://playlist-relinker.onrender.com/callback'
 
 SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private'
+
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 @app.route('/')
 def home():
@@ -82,12 +89,22 @@ def relink():
                     found_track = search_result['tracks']['items'][0]
                     found_track_name = found_track['name']
                     found_artist_name = found_track['artists'][0]['name']
-                    found_tracks.append(found_track['id'])
-                    report_tracks.append({
-                        'status': 'found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': f"{found_artist_name} – {found_track_name}"
-                    })
+
+                    if (normalize(found_track_name) == normalize(original_track_name) and
+                        normalize(found_artist_name) == normalize(original_artist_name)):
+                        found_tracks.append(found_track['id'])
+                        report_tracks.append({
+                            'status': 'found',
+                            'original': f"{original_artist_name} – {original_track_name}",
+                            'found': f"{found_artist_name} – {found_track_name}"
+                        })
+                    else:
+                        not_found_tracks.append(original_query)
+                        report_tracks.append({
+                            'status': 'not_found',
+                            'original': f"{original_artist_name} – {original_track_name}",
+                            'found': None
+                        })
                 else:
                     not_found_tracks.append(original_query)
                     report_tracks.append({
