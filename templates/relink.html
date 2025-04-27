@@ -91,7 +91,7 @@
       {{ total }} items: <span class="found">{{ found }} found</span>, <span class="missed">{{ not_found }} missed</span>
     </div>
 
-    <a href="{{ playlist_url }}" target="_blank" class="button" onclick="openSpotifyApp(event)">Open playlist</a>
+    <a href="#" onclick="openSpotifyApp(event)" class="button">Open playlist</a>
 
     <div class="track-list">
       {% for track in report_tracks %}
@@ -124,7 +124,6 @@
       const fallbackUrl = "{{ playlist_url }}";
 
       window.location.href = spotifyUri;
-
       setTimeout(() => {
         window.location.href = fallbackUrl;
       }, 1500);

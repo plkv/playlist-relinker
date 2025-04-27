@@ -68,6 +68,25 @@ def is_similar(name1, name2):
     n2 = normalize(name2)
     return n1 in n2 or n2 in n1
 
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9\\s]', '', text)
+    text = re.sub(r'\\s+', ' ', text)
+    return text.strip()
+
+def is_similar_name(name1, name2):
+    n1 = normalize(name1)
+    n2 = normalize(name2)
+    return n1 in n2 or n2 in n1
+
+def artist_list(text):
+    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
+    parts = [normalize(part) for part in text.split(',')]
+    return [p for p in parts if p]
+
+def has_common_artist(original_artists, found_artists):
+    return any(artist in found_artists for artist in original_artists)
+
 @app.route('/relink', methods=['GET', 'POST'])
 def relink():
     token_info = session.get('token_info', None)
@@ -93,6 +112,7 @@ def relink():
             if track:
                 original_track_name = track['name']
                 original_artist_name = track['artists'][0]['name']
+                original_artists = artist_list(original_artist_name)
                 original_query = f"{original_track_name} {original_artist_name}"
 
                 search_result = sp.search(q=original_query, type="track", limit=5)
@@ -100,10 +120,10 @@ def relink():
 
                 for candidate in search_result['tracks']['items']:
                     found_track_name = candidate['name']
-                    found_artist_name = candidate['artists'][0]['name']
+                    found_artists_list = artist_list(', '.join(a['name'] for a in candidate['artists']))
 
-                    if (is_similar(found_track_name, original_track_name) and
-                        is_similar(found_artist_name, original_artist_name)):
+                    if (is_similar_name(found_track_name, original_track_name) and
+                        has_common_artist(original_artists, found_artists_list)):
                         best_match = candidate
                         break
 
@@ -136,7 +156,7 @@ def relink():
         return render_template('relink.html', 
                                playlist_name=new_playlist['name'],
                                playlist_url=new_playlist['external_urls']['spotify'],
-                               playlist_spotify_uri=new_playlist['uri'],  # добавил сразу для deeplink
+                               playlist_spotify_uri=new_playlist['uri'],
                                total=len(report_tracks),
                                found=len(found_tracks),
                                not_found=len(not_found_tracks),
@@ -144,6 +164,7 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
+
 
 
 if __name__ == '__main__':
