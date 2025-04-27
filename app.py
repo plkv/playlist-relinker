@@ -194,7 +194,7 @@ def relink():
                                report_tracks=report_tracks)
 
 except Exception as e:
-    return f"Error: {str(e)}"
+    return f"Error: {e}"
 
 # ===== Запуск =====
 
