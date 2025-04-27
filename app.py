@@ -50,7 +50,7 @@ def link():
 
     return render_template('link.html')
 
-@app.route('/relink')
+@app.route('/relink', methods=['GET', 'POST'])
 def relink():
     token_info = session.get('token_info', None)
     playlist_url = session.get('playlist_url', None)
