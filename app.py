@@ -13,48 +13,61 @@ REDIRECT_URI = 'https://playlist-relinker.onrender.com/callback'
 
 SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private'
 
-def normalize(text):
+# ===== Умные функции поиска =====
+
+def normalized(text):
     text = text.lower()
-    text = re.sub(r'\(.*?\)', '', text)  # убираем текст в скобках
-    text = re.sub(r'[^a-z0-9\s]', '', text)  # убираем спецсимволы
-    text = re.sub(r'\s+', ' ', text)  # убираем лишние пробелы
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
-def extract_main_artist_and_track(artist, track_name):
-    track_clean = re.sub(r'\(.*?\)', '', track_name).strip()
-    artist_clean = artist.split(',')[0].split('&')[0].split('and')[0].strip()
-    return artist_clean, track_clean
-
-def has_common_artist(original_artists, found_artists):
-    return any(artist in found_artists for artist in original_artists)
+def artist_list(text):
+    text = text.lower().replace('feat.', ',').replace('ft.', ',').replace('&', ',').replace('and', ',')
+    parts = [re.sub(r'[^a-z0-9]', '', p.strip()) for p in text.split(',')]
+    return [p for p in parts if p]
 
 def is_remix(name):
     return 'remix' in name.lower()
 
+def matches(track_name_candidate, artist_candidate_list, original_track_name, original_artist_list):
+    track_name_candidate_norm = normalized(track_name_candidate)
+    original_track_name_norm = normalized(original_track_name)
+    name_match = (original_track_name_norm in track_name_candidate_norm) or (track_name_candidate_norm in original_track_name_norm)
+
+    artist_match = any(artist in artist_candidate_list for artist in original_artist_list)
+
+    return name_match and artist_match
+
 def search_best_match(sp, original_artist, original_track_name):
-    original_query = f"{original_track_name} {original_artist}"
-    search_result = sp.search(q=original_query, type="track", limit=5)
-    
-    for candidate in search_result['tracks']['items']:
-        candidate_track = candidate['name']
-        candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
+    original_artist_list = artist_list(original_artist)
+    original_track_norm = normalized(original_track_name)
+    original_is_remix = is_remix(original_track_name)
 
-        if normalize(candidate_track) == normalize(original_track_name) and normalize(candidate_artists).find(normalize(original_artist)) != -1:
-            return candidate
+    queries = [
+        f"{original_track_name} {original_artist}",
+        f"{re.sub(r'\(.*?\)', '', original_track_name).strip()} {original_artist.split(',')[0]}",
+        f"{re.sub(r'\(.*?\)', '', original_track_name).strip()}"
+    ]
 
-    artist_main, track_main = extract_main_artist_and_track(original_artist, original_track_name)
-    reduced_query = f"{track_main} {artist_main}"
-    search_result_reduced = sp.search(q=reduced_query, type="track", limit=5)
+    for query in queries:
+        search_result = sp.search(q=query, type="track", limit=20)
+        for candidate in search_result['tracks']['items']:
+            candidate_track_name = candidate['name']
+            candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
+            candidate_artist_list = artist_list(candidate_artists)
 
-    for candidate in search_result_reduced['tracks']['items']:
-        candidate_track = candidate['name']
-        candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
+            if original_is_remix and not is_remix(candidate_track_name):
+                continue
+            if not original_is_remix and is_remix(candidate_track_name):
+                continue
 
-        if normalize(candidate_track).startswith(normalize(track_main)) and normalize(candidate_artists).find(normalize(artist_main)) != -1:
-            if is_remix(original_track_name) or not is_remix(candidate_track):
+            if matches(candidate_track_name, candidate_artist_list, original_track_name, original_artist_list):
                 return candidate
 
     return None
+
+# ===== Маршруты =====
 
 @app.route('/')
 def home():
@@ -115,25 +128,27 @@ def relink():
 
         for item in tracks:
             track = item['track']
-            if track:
-                original_track_name = track['name']
-                original_artist_name = track['artists'][0]['name']
+            if not track:
+                continue
 
-                best_match = search_best_match(sp, original_artist_name, original_track_name)
+            original_track_name = track['name']
+            original_artist_name = track['artists'][0]['name']
 
-                if best_match:
-                    found_tracks.append(best_match['id'])
-                    report_tracks.append({
-                        'status': 'found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
-                    })
-                else:
-                    report_tracks.append({
-                        'status': 'not_found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': None
-                    })
+            best_match = search_best_match(sp, original_artist_name, original_track_name)
+
+            if best_match:
+                found_tracks.append(best_match['id'])
+                report_tracks.append({
+                    'status': 'found',
+                    'original': f"{original_artist_name} – {original_track_name}",
+                    'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
+                })
+            else:
+                report_tracks.append({
+                    'status': 'not_found',
+                    'original': f"{original_artist_name} – {original_track_name}",
+                    'found': None
+                })
 
         user_id = sp.current_user()['id']
 
@@ -157,6 +172,8 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
+
+# ===== Запуск =====
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
