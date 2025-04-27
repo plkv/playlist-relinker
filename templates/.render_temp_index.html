@@ -2,16 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Insert Playlist Link - Playlist Relinker</title>
+  <title>Sign In - Playlist Relinker</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
 </head>
 <body>
   <div class="container">
-    <h1>Insert your playlist link</h1>
-    <form method="post">
-      <input type="text" name="playlist_url" placeholder="Paste your playlist URL here..." required>
-      <button type="submit">Rebuild</button>
-    </form>
+    <h1>Welcome back</h1>
+    <p>Sign in with your Spotify account to rebuild your playlists</p>
+    <a href="{{ url_for('login') }}" class="button">Sign in with Spotify</a>
     <div class="version">v1.10</div>
   </div>
 </body>

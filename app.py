@@ -44,10 +44,14 @@ def search_best_match(sp, original_artist, original_track_name):
     original_track_norm = normalized(original_track_name)
     original_is_remix = is_remix(original_track_name)
 
+    # Новый код: подготовка запросов заранее
+    track_main = re.sub(r'\(.*?\)', '', original_track_name).strip()
+    artist_main = original_artist.split(',')[0].strip()
+
     queries = [
         f"{original_track_name} {original_artist}",
-        f"{re.sub(r'\(.*?\)', '', original_track_name).strip()} {original_artist.split(',')[0]}",
-        f"{re.sub(r'\(.*?\)', '', original_track_name).strip()}"
+        f"{track_main} {artist_main}",
+        f"{track_main}"
     ]
 
     for query in queries:
