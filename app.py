@@ -100,11 +100,15 @@ def relink():
                 original_artist_name = track['artists'][0]['name']
                 original_artists = artist_list(original_artist_name)
 
-                # Correct formatted search
+                # Первичная попытка поиска
                 query = f"track:{original_track_name} artist:{original_artist_name}"
-
                 search_result = sp.search(q=query, type="track", limit=5)
                 best_match = None
+
+                # Если ничего не найдено, fallback-поиск только по треку
+                if not search_result['tracks']['items']:
+                    fallback_query = f"track:{original_track_name}"
+                    search_result = sp.search(q=fallback_query, type="track", limit=5)
 
                 for candidate in search_result['tracks']['items']:
                     found_track_name = candidate['name']
@@ -151,7 +155,7 @@ def relink():
     except Exception as e:
         return render_template('relink.html', error=str(e))
 
-# ======= Run the app =======
+# ======= Run =======
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
