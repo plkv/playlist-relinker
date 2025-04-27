@@ -87,6 +87,28 @@ def artist_list(text):
 def has_common_artist(original_artists, found_artists):
     return any(artist in found_artists for artist in original_artists)
 
+import re
+
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r'\(.*?\)', '', text)  # убрать всё в скобках
+    text = re.sub(r'[^a-z0-9\s]', '', text)  # убрать всё кроме букв, цифр и пробелов
+    text = re.sub(r'\s+', ' ', text)  # убрать двойные пробелы
+    return text.strip()
+
+def is_similar_name(name1, name2):
+    n1 = normalize(name1)
+    n2 = normalize(name2)
+    return n1 in n2 or n2 in n1
+
+def artist_list(text):
+    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
+    parts = [normalize(part) for part in text.split(',')]
+    return [p for p in parts if p]
+
+def has_common_artist(original_artists, found_artists):
+    return any(artist in found_artists for artist in original_artists)
+
 @app.route('/relink', methods=['GET', 'POST'])
 def relink():
     token_info = session.get('token_info', None)
@@ -104,7 +126,6 @@ def relink():
         tracks = tracks_data['items']
 
         found_tracks = []
-        not_found_tracks = []
         report_tracks = []
 
         for item in tracks:
@@ -122,8 +143,7 @@ def relink():
                     found_track_name = candidate['name']
                     found_artists_list = artist_list(', '.join(a['name'] for a in candidate['artists']))
 
-                    if (is_similar_name(found_track_name, original_track_name) and
-                        has_common_artist(original_artists, found_artists_list)):
+                    if is_similar_name(found_track_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
                         best_match = candidate
                         break
 
@@ -135,7 +155,6 @@ def relink():
                         'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
                     })
                 else:
-                    not_found_tracks.append(original_query)
                     report_tracks.append({
                         'status': 'not_found',
                         'original': f"{original_artist_name} – {original_track_name}",
@@ -158,8 +177,8 @@ def relink():
                                playlist_url=new_playlist['external_urls']['spotify'],
                                playlist_spotify_uri=new_playlist['uri'],
                                total=len(report_tracks),
-                               found=len(found_tracks),
-                               not_found=len(not_found_tracks),
+                               found=len([t for t in report_tracks if t['status'] == 'found']),
+                               not_found=len([t for t in report_tracks if t['status'] == 'not_found']),
                                report_tracks=report_tracks)
 
     except Exception as e:
