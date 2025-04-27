@@ -2,18 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Offline Playlist Relinker</title>
+    <title>Перелинковка плейлиста</title>
 </head>
 <body>
     <h1>Перелинковка старого плейлиста</h1>
-    <form method="post">
-        <label for="playlist_url">Вставь ссылку на плейлист:</label><br>
-        <input type="text" id="playlist_url" name="playlist_url" size="60" required><br><br>
-        <button type="submit">Перелинковать</button>
-    </form>
-    <br>
-    <div>
-        <strong>{{ message }}</strong>
-    </div>
+    <a href="{{ url_for('login') }}">🔑 Войти через Spotify</a>
 </body>
 </html>

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Перелинковка плейлиста</title>
+</head>
+<body>
+    <h1>Пересобрать плейлист</h1>
+    <form method="post">
+        <input type="text" name="playlist_url" placeholder="Вставь ссылку на плейлист" required>
+        <button type="submit">Перелинковать</button>
+    </form>
+    {% if message %}
+        <div>{{ message|safe }}</div>
+    {% endif %}
+</body>
+</html>
