@@ -1,115 +1,135 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Playlist Rebuilt</title>
-    <style>
-        body {
-            background-color: #121212;
-            color: #FFFFFF;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            background-color: #181818;
-            border-radius: 24px;
-            padding: 40px 30px;
-            width: 100%;
-            max-width: 600px;
-            text-align: center;
-        }
-        h2 {
-            font-size: 24px;
-            color: #B3B3B3;
-            margin-bottom: 10px;
-        }
-        h1 {
-            font-size: 32px;
-            margin-bottom: 20px;
-        }
-        .stats {
-            margin-bottom: 20px;
-            font-size: 16px;
-        }
-        .stats .found {
-            color: #1DB954;
-        }
-        .stats .missed {
-            color: #FFA500;
-        }
-        .button {
-            display: inline-block;
-            padding: 14px 24px;
-            margin: 10px 0;
-            border-radius: 30px;
-            background-color: #3E3E3E;
-            color: #FFFFFF;
-            font-size: 16px;
-            font-weight: bold;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
-        }
-        .button:hover {
-            background-color: #5E5E5E;
-        }
-        .track-list {
-            text-align: left;
-            margin-top: 20px;
-        }
-        .track {
-            display: flex;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #282828;
-        }
-        .track-icon {
-            margin-right: 10px;
-        }
-        .error {
-            color: #FFA500;
-            margin-top: 20px;
-            font-size: 14px;
-        }
-        .version {
-            font-size: 14px;
-            color: #B3B3B3;
-            margin-top: 30px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Playlist Rebuilt</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #FFFFFF;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background-color: #181818;
+      border-radius: 24px;
+      padding: 40px 30px;
+      width: 100%;
+      max-width: 600px;
+      text-align: center;
+    }
+    h2 {
+      font-size: 24px;
+      color: #B3B3B3;
+      margin-bottom: 10px;
+    }
+    h1 {
+      font-size: 32px;
+      margin-bottom: 20px;
+    }
+    .stats {
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+    .stats .found {
+      color: #1DB954;
+    }
+    .stats .missed {
+      color: #FFA500;
+    }
+    .button {
+      display: inline-block;
+      padding: 14px 24px;
+      margin: 10px 0;
+      border-radius: 30px;
+      background-color: #3E3E3E;
+      color: #FFFFFF;
+      font-size: 16px;
+      font-weight: bold;
+      text-decoration: none;
+      transition: background-color 0.3s ease;
+    }
+    .button:hover {
+      background-color: #5E5E5E;
+    }
+    .track-list {
+      text-align: left;
+      margin-top: 20px;
+    }
+    .track {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #282828;
+    }
+    .track-icon {
+      margin-right: 10px;
+    }
+    .error {
+      color: #FFA500;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    .version {
+      font-size: 14px;
+      color: #B3B3B3;
+      margin-top: 30px;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Playlist rebuilt</h2>
-        <h1>{{ playlist_name }}</h1>
-        <div class="stats">
-            {{ total }} items: <span class="found">{{ found }} found</span>, <span class="missed">{{ not_found }} missed</span>
-        </div>
-        <a href="{{ playlist_url }}" target="_blank" class="button">Open playlist</a>
-        <div class="track-list">
-            {% for track in report_tracks %}
-                <div class="track">
-                    <div class="track-icon">
-                        {% if track.status == 'found' %}
-                            ✅
-                        {% else %}
-                            ⚠️
-                        {% endif %}
-                    </div>
-                    <div>{{ track.original }}</div>
-                </div>
-            {% endfor %}
-        </div>
-        {% if error %}
-            <div class="error">Error: {{ error }}</div>
-        {% endif %}
-        <a href="{{ url_for('link') }}" class="button">Rebuild one more</a>
-        <div class="version">v1.03</div>
+  <div class="container">
+    <h2>Playlist rebuilt</h2>
+    <h1>{{ playlist_name }}</h1>
+
+    <div class="stats">
+      {{ total }} items: <span class="found">{{ found }} found</span>, <span class="missed">{{ not_found }} missed</span>
     </div>
+
+    <a href="{{ playlist_url }}" target="_blank" class="button" onclick="openSpotifyApp(event)">Open playlist</a>
+
+    <div class="track-list">
+      {% for track in report_tracks %}
+        <div class="track">
+          <div class="track-icon">
+            {% if track.status == 'found' %}
+              ✅
+            {% else %}
+              ⚠️
+            {% endif %}
+          </div>
+          <div>{{ track.original }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if error %}
+      <div class="error">Error: {{ error }}</div>
+    {% endif %}
+
+    <a href="{{ url_for('link') }}" class="button">Rebuild one more</a>
+
+    <div class="version">v1.03</div>
+  </div>
+
+  <script>
+    function openSpotifyApp(event) {
+      event.preventDefault();
+      const spotifyUri = "{{ playlist_spotify_uri }}";
+      const fallbackUrl = "{{ playlist_url }}";
+
+      window.location.href = spotifyUri;
+
+      setTimeout(() => {
+        window.location.href = fallbackUrl;
+      }, 1500);
+    }
+  </script>
 </body>
 </html>
 <script>window.scrollTo(0, 0); setTimeout(function() { window.scrollTo(0, 0); },200)</script>

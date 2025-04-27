@@ -57,6 +57,17 @@ def link():
 
     return render_template('link.html')
 
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+def is_similar(name1, name2):
+    n1 = normalize(name1)
+    n2 = normalize(name2)
+    return n1 in n2 or n2 in n1
+
 @app.route('/relink', methods=['GET', 'POST'])
 def relink():
     token_info = session.get('token_info', None)
@@ -84,27 +95,25 @@ def relink():
                 original_artist_name = track['artists'][0]['name']
                 original_query = f"{original_track_name} {original_artist_name}"
 
-                search_result = sp.search(q=original_query, type="track", limit=1)
-                if search_result['tracks']['items']:
-                    found_track = search_result['tracks']['items'][0]
-                    found_track_name = found_track['name']
-                    found_artist_name = found_track['artists'][0]['name']
+                search_result = sp.search(q=original_query, type="track", limit=5)
+                best_match = None
 
-                    if (normalize(found_track_name) == normalize(original_track_name) and
-                        normalize(found_artist_name) == normalize(original_artist_name)):
-                        found_tracks.append(found_track['id'])
-                        report_tracks.append({
-                            'status': 'found',
-                            'original': f"{original_artist_name} – {original_track_name}",
-                            'found': f"{found_artist_name} – {found_track_name}"
-                        })
-                    else:
-                        not_found_tracks.append(original_query)
-                        report_tracks.append({
-                            'status': 'not_found',
-                            'original': f"{original_artist_name} – {original_track_name}",
-                            'found': None
-                        })
+                for candidate in search_result['tracks']['items']:
+                    found_track_name = candidate['name']
+                    found_artist_name = candidate['artists'][0]['name']
+
+                    if (is_similar(found_track_name, original_track_name) and
+                        is_similar(found_artist_name, original_artist_name)):
+                        best_match = candidate
+                        break
+
+                if best_match:
+                    found_tracks.append(best_match['id'])
+                    report_tracks.append({
+                        'status': 'found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
+                    })
                 else:
                     not_found_tracks.append(original_query)
                     report_tracks.append({
@@ -127,6 +136,7 @@ def relink():
         return render_template('relink.html', 
                                playlist_name=new_playlist['name'],
                                playlist_url=new_playlist['external_urls']['spotify'],
+                               playlist_spotify_uri=new_playlist['uri'],  # добавил сразу для deeplink
                                total=len(report_tracks),
                                found=len(found_tracks),
                                not_found=len(not_found_tracks),
@@ -134,6 +144,7 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
