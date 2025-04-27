@@ -193,8 +193,8 @@ def relink():
                                not_found=len([t for t in report_tracks if t['status'] == 'not_found']),
                                report_tracks=report_tracks)
 
-    except Exception as e:
-        return render_template('relink.html', error=str(e))
+except Exception as e:
+    return f"Error: {str(e)}"
 
 # ===== Запуск =====
 
