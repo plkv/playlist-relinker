@@ -2,10 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Перелинковка плейлиста</title>
+    <title>Relink Playlist</title>
 </head>
 <body>
-    <h1>Перелинковка старого плейлиста</h1>
-    <a href="{{ url_for('login') }}">🔑 Войти через Spotify</a>
+    <h1>Rebuild Playlist</h1>
+    <form method="post">
+        <input type="text" name="playlist_url" placeholder="Paste the playlist URL" required>
+        <button type="submit">Relink</button>
+    </form>
+    {% if message %}
+        <div>{{ message|safe }}</div>
+    {% endif %}
 </body>
 </html>

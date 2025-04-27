@@ -6,7 +6,6 @@ import os
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# 🔥 Твои данные
 CLIENT_ID = 'e727213173e141f482270557f6d11e26'
 CLIENT_SECRET = '924f0275c3214841a33331d0959e2c4f'
 REDIRECT_URI = 'https://playlist-relinker.onrender.com/callback'
@@ -57,32 +56,45 @@ def relink():
 
             found_tracks = []
             not_found_tracks = []
+            report_tracks = []
 
             for item in tracks:
                 track = item['track']
                 if track:
-                    track_name = track['name']
-                    artist_name = track['artists'][0]['name']
-                    query = f"{track_name} {artist_name}"
+                    original_track_name = track['name']
+                    original_artist_name = track['artists'][0]['name']
+                    original_query = f"{original_track_name} {original_artist_name}"
 
-                    search_result = sp.search(q=query, type="track", limit=1)
+                    search_result = sp.search(q=original_query, type="track", limit=1)
                     if search_result['tracks']['items']:
-                        found_tracks.append(search_result['tracks']['items'][0]['id'])
+                        found_track = search_result['tracks']['items'][0]
+                        found_track_name = found_track['name']
+                        found_artist_name = found_track['artists'][0]['name']
+                        found_tracks.append(found_track['id'])
+                        report_tracks.append((f"{original_artist_name} – {original_track_name}", f"{found_artist_name} – {found_track_name}"))
                     else:
-                        not_found_tracks.append(query)
+                        not_found_tracks.append(original_query)
+                        report_tracks.append((f"{original_artist_name} – {original_track_name}", "❌"))
 
             user_id = sp.current_user()['id']
 
-new_playlist = sp.user_playlist_create(
-    user=user_id,
-    name=f"♻️ {original_playlist['name']}",
-    public=True
-)
+            new_playlist = sp.user_playlist_create(
+                user=user_id,
+                name=f"♻️ {original_playlist['name']}",
+                public=True
+            )
 
             if found_tracks:
                 sp.playlist_add_items(playlist_id=new_playlist['id'], items=found_tracks)
 
-            message = f"✅ Новый плейлист создан: {new_playlist['external_urls']['spotify']}<br>✅ Найдено: {len(found_tracks)} треков. ❌ Не найдено: {len(not_found_tracks)} треков."
+            message = f"✅ Новый плейлист создан: <a href='{new_playlist['external_urls']['spotify']}' target='_blank'>{new_playlist['name']}</a><br><br>"
+            message += "<table border='1' cellspacing='0' cellpadding='5'>"
+            message += "<tr><th>Оригинал</th><th>Найдено</th></tr>"
+
+            for original, found in report_tracks:
+                message += f"<tr><td>{original}</td><td>{found}</td></tr>"
+
+            message += "</table>"
 
         except Exception as e:
             message = f"Ошибка: {str(e)}"
