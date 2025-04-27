@@ -16,10 +16,12 @@ SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-publi
 
 def normalize(text):
     text = text.lower()
-    text = re.sub(r'\(.*?\)', '', text)  # Remove anything in parentheses
-    text = re.sub(r'[^a-z0-9\s]', '', text)  # Remove special characters
-    text = re.sub(r'\s+', ' ', text)  # Normalize spaces
-    return text.strip()
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+    text = text.replace(' ', '')  # Убираем ВСЕ пробелы между буквами!
+    return text
 
 def normalize_artist(text):
     text = text.lower()
@@ -128,7 +130,7 @@ def relink():
                         best_match = candidate
                         break
 
-            # Fallback: search only by track name if no match
+            # fallback - ищем только по названию трека
             if not best_match:
                 fallback_query = f"{original_track_name}"
                 fallback_result = sp.search(q=fallback_query, type="track", limit=5)
@@ -142,7 +144,6 @@ def relink():
                         best_match = candidate
                         break
 
-            # Add result only once
             if best_match:
                 found_tracks.append(best_match['id'])
                 report_tracks.append({
