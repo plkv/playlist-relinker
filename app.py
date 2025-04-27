@@ -95,15 +95,19 @@ def relink():
 
         for item in tracks:
             track = item['track']
-            if track:
-                original_track_name = track['name']
-                original_artist_name = track['artists'][0]['name']
-                original_artists = artist_list(original_artist_name)
+            if not track:
+                continue
 
-                query = f"{original_track_name} {original_artist_name}"
-                search_result = sp.search(q=query, type="track", limit=5)
+            original_track_name = track['name']
+            original_artist_name = track['artists'][0]['name']
+            original_artists = artist_list(original_artist_name)
 
-                best_match = None
+            query = f"{original_track_name} {original_artist_name}"
+            search_result = sp.search(q=query, type="track", limit=5)
+
+            best_match = None
+
+            if search_result['tracks']['items']:
                 for candidate in search_result['tracks']['items']:
                     candidate_name = candidate['name']
                     candidate_artists = ', '.join(a['name'] for a in candidate['artists'])
@@ -113,19 +117,19 @@ def relink():
                         best_match = candidate
                         break
 
-                if best_match:
-                    found_tracks.append(best_match['id'])
-                    report_tracks.append({
-                        'status': 'found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
-                    })
-                else:
-                    report_tracks.append({
-                        'status': 'not_found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': None
-                    })
+            if best_match:
+                found_tracks.append(best_match['id'])
+                report_tracks.append({
+                    'status': 'found',
+                    'original': f"{original_artist_name} – {original_track_name}",
+                    'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
+                })
+            else:
+                report_tracks.append({
+                    'status': 'not_found',
+                    'original': f"{original_artist_name} – {original_track_name}",
+                    'found': None
+                })
 
         user_id = sp.current_user()['id']
 
@@ -149,7 +153,6 @@ def relink():
 
     except Exception as e:
         return render_template('relink.html', error=str(e))
-
 
 # ======= Run =======
 
