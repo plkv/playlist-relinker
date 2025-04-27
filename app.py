@@ -131,24 +131,43 @@ def relink():
             if not track:
                 continue
 
+            original_track_id = track.get('id')
             original_track_name = track['name']
             original_artist_name = track['artists'][0]['name']
 
-            best_match = search_best_match(sp, original_artist_name, original_track_name)
+            added = False
 
-            if best_match:
-                found_tracks.append(best_match['id'])
-                report_tracks.append({
-                    'status': 'found',
-                    'original': f"{original_artist_name} – {original_track_name}",
-                    'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
-                })
-            else:
-                report_tracks.append({
-                    'status': 'not_found',
-                    'original': f"{original_artist_name} – {original_track_name}",
-                    'found': None
-                })
+            # Пытаемся добавить напрямую через ID
+            if original_track_id:
+                try:
+                    track_info = sp.track(original_track_id)
+                    if track_info and not track_info['is_local']:
+                        found_tracks.append(original_track_id)
+                        report_tracks.append({
+                            'status': 'found',
+                            'original': f"{original_artist_name} – {original_track_name}",
+                            'found': f"{track_info['artists'][0]['name']} – {track_info['name']}"
+                        })
+                        added = True
+                except:
+                    pass  # ID недействительный, fallback на текстовый поиск
+
+            # Иначе fallback-поиск
+            if not added:
+                best_match = search_best_match(sp, original_artist_name, original_track_name)
+                if best_match:
+                    found_tracks.append(best_match['id'])
+                    report_tracks.append({
+                        'status': 'found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
+                    })
+                else:
+                    report_tracks.append({
+                        'status': 'not_found',
+                        'original': f"{original_artist_name} – {original_track_name}",
+                        'found': None
+                    })
 
         user_id = sp.current_user()['id']
 
