@@ -43,3 +43,79 @@ def handle_setlink():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+# app.py (добавить после импорта и авторизации)
+user_token = None  # Временно, на одного пользователя
+
+@app.route("/token", methods=["POST"])
+def save_token():
+    global user_token
+    data = request.get_json()
+    user_token = data.get("token")
+    print("✅ Saved token:", user_token)
+    return jsonify({"status": "ok"})
+
+access_token = None  # Глобальная переменная для хранения токена
+
+@app.route("/token", methods=["POST"])
+def store_token():
+    global access_token
+    data = request.get_json()
+    access_token = data.get("token")
+    print("✅ Access token received and stored")
+    return jsonify({"status": "ok"})
+
+playlist_data = {}
+
+@app.route("/setlink", methods=["POST"])
+def set_link():
+    global access_token, playlist_data
+
+    if not access_token:
+        return "Not authorized", 401
+
+    data = request.get_json()
+    playlist_url = data.get("playlist_url")
+
+    if not playlist_url:
+        return "Missing playlist URL", 400
+
+    # Извлечение playlist ID
+    match = re.search(r"playlist/([a-zA-Z0-9]+)", playlist_url)
+    if not match:
+        return "Invalid playlist URL", 400
+
+    playlist_id = match.group(1)
+
+    # Запрос к Spotify
+    headers = {"Authorization": f"Bearer {access_token}"}
+    playlist_resp = requests.get(
+        f"https://api.spotify.com/v1/playlists/{playlist_id}", headers=headers
+    )
+
+    if playlist_resp.status_code != 200:
+        print("❌ Spotify error:", playlist_resp.text)
+        return "Spotify error", 500
+
+    playlist_json = playlist_resp.json()
+
+    tracks = []
+    for item in playlist_json["tracks"]["items"]:
+        name = item["track"]["name"]
+        artist = item["track"]["artists"][0]["name"]
+        tracks.append({"original": f"{artist} - {name}", "found": None})
+
+    playlist_data = {
+        "playlist_name": "♻️ " + playlist_json["name"],
+        "playlist_url": playlist_url,
+        "total_count": len(tracks),
+        "found_count": 0,
+        "not_found_count": len(tracks),
+        "tracks": tracks,
+    }
+
+    return jsonify({"status": "ok"})
+@app.route("/results", methods=["GET"])
+def get_results():
+    return jsonify(playlist_data)
+
