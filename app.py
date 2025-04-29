@@ -2,21 +2,17 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
-import openai
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Разрешает CORS для всех доменов
 
-# Spotify Auth
+# Spotify client credentials
 SPOTIFY_CLIENT_ID = "e727213173e141f482270557f6d11e26"
-SPOTIFY_CLIENT_SECRET = "924f0275c3214841a33331d00959e2c4f"
+SPOTIFY_CLIENT_SECRET = "924f0275c3214841a33331d0959e2c4f"
 REDIRECT_URI = "https://exuberant-managers-615414.framer.app/setlink"
 
-# GPT
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Временное хранилище
-results_data = {}
+# Хранилище для результатов (в памяти, только временно)
+latest_result = {}
 
 @app.route("/spotify/auth", methods=["POST"])
 def exchange_code():
@@ -31,26 +27,35 @@ def exchange_code():
         "client_secret": SPOTIFY_CLIENT_SECRET,
     })
 
-    return jsonify(response.json())
+    return jsonify(response.json()), response.status_code
 
 @app.route("/setlink", methods=["POST"])
-def set_link():
+def setlink():
+    global latest_result
     data = request.get_json()
     playlist_url = data.get("playlist_url")
 
-    # Заглушка: нулевой результат
-    results_data["playlist_name"] = "Untitled Playlist"
-    results_data["playlist_url"] = playlist_url
-    results_data["tracks"] = []
-    results_data["total_count"] = 0
-    results_data["found_count"] = 0
-    results_data["not_found_count"] = 0
+    if not playlist_url or "open.spotify.com/playlist/" not in playlist_url:
+        return "Invalid Spotify playlist URL", 400
 
-    return jsonify({"success": True})
+    # Сохраняем заглушку в память
+    latest_result = {
+        "found_count": 0,
+        "not_found_count": 0,
+        "total_count": 0,
+        "playlist_name": "Untitled Playlist",
+        "playlist_url": playlist_url,
+        "tracks": []
+    }
+
+    return "", 200
 
 @app.route("/results", methods=["GET"])
 def get_results():
-    return jsonify(results_data)
+    global latest_result
+    if not latest_result:
+        return jsonify({
+            "error": "No playlist data available"
+        }), 404
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    return jsonify(latest_result)
