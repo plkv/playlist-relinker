@@ -4,58 +4,87 @@ import requests
 import os
 
 app = Flask(__name__)
-CORS(app)  # Разрешает CORS для всех доменов
+CORS(app)
 
-# Spotify client credentials
 SPOTIFY_CLIENT_ID = "e727213173e141f482270557f6d11e26"
-SPOTIFY_CLIENT_SECRET = "924f0275c3214841a33331d0959e2c4f"
+SPOTIFY_CLIENT_SECRET = "924f0275c321481a333310d0959e2c4f"
 REDIRECT_URI = "https://exuberant-managers-615414.framer.app/setlink"
 
-# Хранилище для результатов (в памяти, только временно)
-latest_result = {}
+# Временное хранилище для данных результатов
+latest_results = {}
 
-@app.route("/spotify/auth", methods=["POST"])
-def exchange_code():
-    data = request.get_json()
-    code = data.get("code")
-
+def get_token():
     response = requests.post("https://accounts.spotify.com/api/token", data={
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": REDIRECT_URI,
+        "grant_type": "client_credentials",
         "client_id": SPOTIFY_CLIENT_ID,
-        "client_secret": SPOTIFY_CLIENT_SECRET,
+        "client_secret": SPOTIFY_CLIENT_SECRET
     })
 
-    return jsonify(response.json()), response.status_code
+    return response.json().get("access_token")
 
 @app.route("/setlink", methods=["POST"])
-def setlink():
-    global latest_result
+def handle_setlink():
+    global latest_results
+
     data = request.get_json()
     playlist_url = data.get("playlist_url")
+    if not playlist_url:
+        return "Missing playlist_url", 400
 
-    if not playlist_url or "open.spotify.com/playlist/" not in playlist_url:
+    # Извлечение ID
+    if "playlist/" not in playlist_url:
         return "Invalid Spotify playlist URL", 400
 
-    # Сохраняем заглушку в память
-    latest_result = {
-        "found_count": 0,
-        "not_found_count": 0,
-        "total_count": 0,
-        "playlist_name": "Untitled Playlist",
+    playlist_id = playlist_url.split("playlist/")[1].split("?")[0]
+
+    # Получение access token
+    token = get_token()
+    if not token:
+        return "Failed to authorize with Spotify", 500
+
+    # Получение данных плейлиста
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(f"https://api.spotify.com/v1/playlists/{playlist_id}", headers=headers)
+    if r.status_code != 200:
+        return f"Spotify API error: {r.status_code}", 500
+
+    raw = r.json()
+    name = raw["name"]
+    items = raw["tracks"]["items"]
+
+    tracks = []
+    for item in items:
+        try:
+            track = item["track"]
+            original = f"{track['name']} — {track['artists'][0]['name']}"
+            tracks.append({
+                "original": original,
+                "found": original  # пока просто возвращаем оригинал как найденный
+            })
+        except Exception:
+            continue
+
+    latest_results = {
+        "playlist_name": f"♻️ {name}",
         "playlist_url": playlist_url,
-        "tracks": []
+        "total_count": len(tracks),
+        "found_count": len(tracks),
+        "not_found_count": 0,
+        "tracks": tracks
     }
 
-    return "", 200
+    return jsonify({"status": "ok"})
 
 @app.route("/results", methods=["GET"])
-def get_results():
-    global latest_result
-    if not latest_result:
-        return jsonify({
-            "error": "No playlist data available"
-        }), 404
+def handle_results():
+    return jsonify(latest_results or {
+        "playlist_name": "",
+        "playlist_url": "",
+        "total_count": 0,
+        "found_count": 0,
+        "not_found_count": 0,
+        "tracks": []
+    })
 
-    return jsonify(latest_result)
+if __name__ == "__main__":
+    app.run()
