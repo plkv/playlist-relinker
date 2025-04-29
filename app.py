@@ -118,4 +118,66 @@ def set_link():
 @app.route("/results", methods=["GET"])
 def get_results():
     return jsonify(playlist_data)
+@app.route("/search-tracks", methods=["POST"])
+def search_tracks():
+    global access_token, playlist_data
+
+    if not access_token:
+        return "Not authorized", 401
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    new_tracks = []
+    found = 0
+    not_found = 0
+
+    for track in playlist_data.get("tracks", []):
+        original = track["original"]
+
+        # Запрос к GPT
+        try:
+            completion = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Ты помогаешь найти треки в Spotify."},
+                    {"role": "user", "content": f"Исправь название трека для поиска в Spotify: {original}"},
+                ]
+            )
+            corrected = completion.choices[0].message["content"]
+        except Exception as e:
+            print(f"❌ GPT error: {e}")
+            corrected = original
+
+        # Поиск трека в Spotify
+        query = corrected.strip()
+        search_resp = requests.get(
+            "https://api.spotify.com/v1/search",
+            headers=headers,
+            params={"q": query, "type": "track", "limit": 1}
+        )
+
+        if search_resp.status_code != 200:
+            print(f"❌ Spotify search error: {search_resp.text}")
+            new_tracks.append({"original": original, "found": None})
+            not_found += 1
+            continue
+
+        results = search_resp.json()
+        items = results.get("tracks", {}).get("items", [])
+
+        if items:
+            track_name = items[0]["name"]
+            artist_name = items[0]["artists"][0]["name"]
+            new_tracks.append({"original": original, "found": f"{artist_name} - {track_name}"})
+            found += 1
+        else:
+            new_tracks.append({"original": original, "found": None})
+            not_found += 1
+
+    # Обновляем результаты
+    playlist_data["tracks"] = new_tracks
+    playlist_data["found_count"] = found
+    playlist_data["not_found_count"] = not_found
+
+    return jsonify({"status": "ok"})
 
