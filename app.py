@@ -5,7 +5,7 @@ import os
 import openai
 
 app = Flask(__name__)
-CORS(app)  # разрешить запросы с любых доменов
+CORS(app)
 
 # Spotify Auth
 SPOTIFY_CLIENT_ID = "e727213173e141f482270557f6d11e26"
@@ -15,7 +15,7 @@ REDIRECT_URI = "https://exuberant-managers-615414.framer.app/setlink"
 # GPT
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Хранилище мок-результатов (в реальности можно заменить на Redis, сессии и т.д.)
+# Временное хранилище
 results_data = {}
 
 @app.route("/spotify/auth", methods=["POST"])
@@ -38,22 +38,13 @@ def set_link():
     data = request.get_json()
     playlist_url = data.get("playlist_url")
 
-    # здесь ты можешь сохранить ссылку или сразу что-то обработать
-    results_data["playlist_name"] = "My Playlist"
+    # Заглушка: нулевой результат
+    results_data["playlist_name"] = "Untitled Playlist"
     results_data["playlist_url"] = playlist_url
-    results_data["tracks"] = [
-        {
-            "original": "Daft Punk – Harder, Better, Faster, Stronger",
-            "found": "Daft Punk – Harder Better Faster Stronger (MP3)"
-        },
-        {
-            "original": "Unknown Artist – Random Track",
-            "found": None
-        }
-    ]
-    results_data["total_count"] = 2
-    results_data["found_count"] = 1
-    results_data["not_found_count"] = 1
+    results_data["tracks"] = []
+    results_data["total_count"] = 0
+    results_data["found_count"] = 0
+    results_data["not_found_count"] = 0
 
     return jsonify({"success": True})
 
