@@ -9,7 +9,7 @@ CORS(app, origins=["https://exuberant-managers-615414.framer.app"])  # Разр�
 
 # Spotify API constants
 SPOTIFY_CLIENT_ID = "e727213173e141f482270557f6d11e26"
-SPOTIFY_CLIENT_SECRET = "924f0275c231481a333310d0959e2c4f"
+SPOTIFY_CLIENT_SECRET = "924f0275c3214841a33331d0959e2c4f"
 REDIRECT_URI = "https://exuberant-managers-615414.framer.app/setlink"
 
 # GPT API
@@ -43,5 +43,3 @@ def handle_setlink():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-print("App started")
