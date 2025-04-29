@@ -1,165 +1,45 @@
-from flask import Flask, render_template, request, redirect, session, url_for
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import requests
+import openai
 import os
-import re
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+CORS(app, origins=["https://exuberant-managers-615414.framer.app"])  # Разрешаем только Framer-домен
 
-CLIENT_ID = 'e727213173e141f482270557f6d11e26'
-CLIENT_SECRET = '924f0275c3214841a33331d0959e2c4f'
-REDIRECT_URI = 'https://playlist-relinker.onrender.com/callback'
+# Spotify API constants
+SPOTIFY_CLIENT_ID = "e727213173e141f482270557f6d11e26"
+SPOTIFY_CLIENT_SECRET = "924f0275c231481a333310d0959e2c4f"
+REDIRECT_URI = "https://exuberant-managers-615414.framer.app/setlink"
 
-SCOPE = 'playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private'
+# GPT API
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def normalize(text):
-    text = text.lower()
-    text = re.sub(r'\(.*?\)', '', text)
-    text = re.sub(r'[^a-z0-9\s]', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+@app.route("/spotify/auth", methods=["POST"])
+def exchange_code():
+    data = request.get_json()
+    code = data.get("code")
 
-def artist_list(text):
-    text = text.lower().replace('feat.', ',').replace('&', ',').replace('and', ',')
-    parts = [normalize(part) for part in text.split(',')]
-    return [p for p in parts if p]
+    response = requests.post("https://accounts.spotify.com/api/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": SPOTIFY_CLIENT_ID,
+        "client_secret": SPOTIFY_CLIENT_SECRET,
+    })
 
-def has_common_artist(original_artists, found_artists):
-    return any(artist in found_artists for artist in original_artists)
+    return jsonify(response.json()), response.status_code
 
-def is_similar_name(name1, name2):
-    n1 = normalize(name1)
-    n2 = normalize(name2)
-    return n1 in n2 or n2 in n1
+@app.route("/setlink", methods=["POST"])
+def handle_setlink():
+    data = request.get_json()
+    playlist_url = data.get("playlist_url")
 
-@app.route('/')
-def home():
-    return render_template('index.html')
+    # Временно: просто логируем
+    print("Received playlist URL:", playlist_url)
 
-@app.route('/login')
-def login():
-    sp_oauth = SpotifyOAuth(client_id=CLIENT_ID,
-                             client_secret=CLIENT_SECRET,
-                             redirect_uri=REDIRECT_URI,
-                             scope=SCOPE)
-    auth_url = sp_oauth.get_authorize_url()
-    return redirect(auth_url)
+    # Тут можно вставить логику обработки ссылки и редирект/ответ
+    return jsonify({"status": "ok"}), 200
 
-@app.route('/callback')
-def callback():
-    sp_oauth = SpotifyOAuth(client_id=CLIENT_ID,
-                             client_secret=CLIENT_SECRET,
-                             redirect_uri=REDIRECT_URI,
-                             scope=SCOPE)
-    session.clear()
-    code = request.args.get('code')
-    token_info = sp_oauth.get_access_token(code)
-    session['token_info'] = token_info
-    return redirect(url_for('link'))
-
-@app.route('/link', methods=['GET', 'POST'])
-def link():
-    token_info = session.get('token_info', None)
-    if not token_info:
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        playlist_url = request.form['playlist_url']
-        session['playlist_url'] = playlist_url
-        return redirect(url_for('relink'))
-
-    return render_template('link.html')
-
-@app.route('/relink', methods=['GET', 'POST'])
-def relink():
-    token_info = session.get('token_info', None)
-    playlist_url = session.get('playlist_url', None)
-
-    if not token_info or not playlist_url:
-        return redirect(url_for('home'))
-
-    sp = spotipy.Spotify(auth=token_info['access_token'])
-
-    try:
-        playlist_id = playlist_url.split("/")[-1].split("?")[0]
-        original_playlist = sp.playlist(playlist_id)
-        tracks_data = sp.playlist_tracks(playlist_id)
-        tracks = tracks_data['items']
-
-        found_tracks = []
-        report_tracks = []
-
-        for item in tracks:
-            track = item['track']
-            if track:
-                original_track_name = track['name']
-                original_artist_name = track['artists'][0]['name']
-                original_artists = artist_list(original_artist_name)
-
-                clean_track_name = re.sub(r'\(.*?\)', '', original_track_name).strip()
-                main_artist = original_artist_name.split(',')[0]
-
-                search_queries = [
-                    f"track:{original_track_name} artist:{original_artist_name}",
-                    f"{original_track_name} {original_artist_name}",
-                    f"{clean_track_name} {original_artist_name}",
-                    f"{original_track_name.split('(')[0].strip()} {main_artist}"
-                ]
-
-                best_match = None
-
-                for query in search_queries:
-                    search_result = sp.search(q=query, type="track", limit=5)
-
-                    for candidate in search_result['tracks']['items']:
-                        found_track_name = candidate['name']
-                        found_artists_list = artist_list(', '.join(a['name'] for a in candidate['artists']))
-
-                        if is_similar_name(found_track_name, original_track_name) and has_common_artist(original_artists, found_artists_list):
-                            best_match = candidate
-                            break
-
-                    if best_match:
-                        break
-
-                if best_match:
-                    found_tracks.append(best_match['id'])
-                    report_tracks.append({
-                        'status': 'found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': f"{best_match['artists'][0]['name']} – {best_match['name']}"
-                    })
-                else:
-                    report_tracks.append({
-                        'status': 'not_found',
-                        'original': f"{original_artist_name} – {original_track_name}",
-                        'found': None
-                    })
-
-        user_id = sp.current_user()['id']
-
-        new_playlist = sp.user_playlist_create(
-            user=user_id,
-            name=f"♻️ {original_playlist['name']}",
-            public=True
-        )
-
-        if found_tracks:
-            sp.playlist_add_items(playlist_id=new_playlist['id'], items=found_tracks)
-
-        return render_template('relink.html', 
-                               playlist_name=new_playlist['name'],
-                               playlist_url=new_playlist['external_urls']['spotify'],
-                               playlist_spotify_uri=new_playlist['uri'],
-                               total=len(report_tracks),
-                               found=len([t for t in report_tracks if t['status'] == 'found']),
-                               not_found=len([t for t in report_tracks if t['status'] == 'not_found']),
-                               report_tracks=report_tracks)
-
-    except Exception as e:
-        return render_template('relink.html', error=str(e))
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    app.run(debug=True)
